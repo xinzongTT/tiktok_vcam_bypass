@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>TikTokVCamBypass</AssemblyName>
+    <ApplicationIcon></ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Authors>xinzongTT</Authors>
+    <Description>TikTok LIVE Studio virtual camera detection bypass</Description>
+  </PropertyGroup>
+
+</Project>
