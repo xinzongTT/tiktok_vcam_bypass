@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>TikTokVCamBypass</AssemblyName>
     <ApplicationIcon></ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.0.2</Version>
     <Authors>xinzongTT</Authors>
     <Description>TikTok LIVE Studio virtual camera detection bypass</Description>
   </PropertyGroup>
