@@ -1,13 +1,15 @@
 using System.Diagnostics;
 using Microsoft.Win32;
+using System.Text.RegularExpressions;
 
 namespace TikTokVCamBypass;
 
 public partial class MainForm : Form
 {
-    private const string OldFunc = "isVirtualCamera(e,t){if(!e||!t)return!1;if(e.startsWith(Yp))return!1;const i=()=>{const i=e===t,r=Boolean(e&&!(0,Rh.rG)(e));return i!==r&&o().info(\"[isVirtualCamera] validate conflict\",e,t),i||r},r=(0,at.sc)().sensitive_restricted_config;return r?!r.physical_camera_list.includes(t)&&(!!r.virtual_camera_ist.includes(t)||i()):i()}";
     private const string NewFunc = "isVirtualCamera(e,t){return!1}";
     private const string JsRelPath = @"resources\app\static\js\";
+    private const string FuncMarker = "isVirtualCamera(e,t){";
+    private const string PatchedMarker = "isVirtualCamera(e,t){return!1}";
 
     private string? _targetFile;
     private string? _backupFile;
@@ -16,12 +18,14 @@ public partial class MainForm : Form
     private string? _jsFileName;
     private bool _obsRunning;
     private bool _tiktokRunning;
+    private string _originalFunc = "";
 
     private static readonly string[] InstallPaths = {
         @"D:\TikTok LIVE Studio",
         @"C:\Program Files\TikTok LIVE Studio",
         @"C:\Program Files (x86)\TikTok LIVE Studio",
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "TikTok LIVE Studio")
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "TikTok LIVE Studio"),
+        @"C:\Program Files\TikTok LIVEStudio"
     };
 
     public MainForm()
@@ -180,10 +184,10 @@ public partial class MainForm : Form
             try
             {
                 var content = File.ReadAllText(filePath);
-                if (content.Contains("isVirtualCamera"))
+                if (content.Contains(FuncMarker))
                     return filePath;
             }
-            catch { /* skip locked/binary files */ }
+            catch { }
         }
         return null;
     }
@@ -191,7 +195,7 @@ public partial class MainForm : Form
     private bool IsPatched()
     {
         if (_targetFile == null || !File.Exists(_targetFile)) return false;
-        try { return File.ReadAllText(_targetFile).Contains(NewFunc); }
+        try { return File.ReadAllText(_targetFile).Contains(PatchedMarker); }
         catch { return false; }
     }
 
@@ -242,30 +246,41 @@ public partial class MainForm : Form
         Log(">>> 正在应用补丁...");
         var content = File.ReadAllText(_targetFile);
 
-        if (!content.Contains(OldFunc))
+        // Find isVirtualCamera(e,t){ and extract the full function
+        int start = content.IndexOf(FuncMarker, StringComparison.Ordinal);
+        if (start == -1)
         {
-            Log("⚠ 未找到预期函数签名");
-            Log("  当前 TikTok 版本可能与 v1.27.0 不同");
-            if (content.Contains("isVirtualCamera"))
-            {
-                Log("  找到 isVirtualCamera 但结构不匹配");
-                Log("  无法自动处理此版本");
-            }
-            else
-            {
-                Log("  文件中未找到 isVirtualCamera");
-            }
+            Log("❌ 未找到 isVirtualCamera 函数定义");
             return;
         }
 
+        // Use bracket counting to find the matching closing brace
+        int end = FindMatchingBrace(content, start + FuncMarker.Length - 1);
+        if (end == -1)
+        {
+            Log("❌ 无法解析函数结构（括号不匹配）");
+            return;
+        }
+
+        // Extract original function
+        _originalFunc = content.Substring(start, end - start + 1);
+        Log($"匹配到函数: {_originalFunc.Length} 字符");
+
+        // Create backup
         if (!File.Exists(_backupFile))
         {
             File.Copy(_targetFile, _backupFile);
             Log("已创建备份 ✓");
         }
 
-        content = content.Replace(OldFunc, NewFunc);
-        File.WriteAllText(_targetFile, content);
+        // Save original function for restore
+        var backupMeta = _backupFile + ".meta";
+        File.WriteAllText(backupMeta, _originalFunc);
+
+        // Replace
+        var newContent = content.Remove(start, end - start + 1)
+                                .Insert(start, NewFunc);
+        File.WriteAllText(_targetFile, newContent);
 
         if (IsPatched())
         {
@@ -297,20 +312,47 @@ public partial class MainForm : Form
         }
         else
         {
-            var content = File.ReadAllText(_targetFile);
-            if (content.Contains(NewFunc))
+            var backupMeta = _backupFile + ".meta";
+            if (File.Exists(backupMeta))
             {
-                content = content.Replace(NewFunc, OldFunc);
-                File.WriteAllText(_targetFile, content);
-                Log("已内联修复 ✓");
+                var originalFunc = File.ReadAllText(backupMeta);
+                var content = File.ReadAllText(_targetFile);
+
+                int start = content.IndexOf(PatchedMarker, StringComparison.Ordinal);
+                if (start >= 0)
+                {
+                    content = content.Remove(start, PatchedMarker.Length)
+                                     .Insert(start, originalFunc);
+                    File.WriteAllText(_targetFile, content);
+                    Log("已从元数据恢复 ✓");
+                }
+                else
+                {
+                    Log("文件已处于原始状态或无法识别");
+                }
             }
             else
             {
-                Log("文件已处于原始状态");
+                Log("备份文件不存在，无法恢复");
             }
         }
         Log("虚拟摄像头检测已恢复正常");
         KillServices();
+    }
+
+    private static int FindMatchingBrace(string content, int openBracePos)
+    {
+        int depth = 0;
+        for (int i = openBracePos; i < content.Length; i++)
+        {
+            if (content[i] == '{') depth++;
+            else if (content[i] == '}')
+            {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
     }
 
     private void KillServices()
