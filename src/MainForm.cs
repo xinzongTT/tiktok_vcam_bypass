@@ -7,13 +7,13 @@ public partial class MainForm : Form
 {
     private const string OldFunc = "isVirtualCamera(e,t){if(!e||!t)return!1;if(e.startsWith(Yp))return!1;const i=()=>{const i=e===t,r=Boolean(e&&!(0,Rh.rG)(e));return i!==r&&o().info(\"[isVirtualCamera] validate conflict\",e,t),i||r},r=(0,at.sc)().sensitive_restricted_config;return r?!r.physical_camera_list.includes(t)&&(!!r.virtual_camera_ist.includes(t)||i()):i()}";
     private const string NewFunc = "isVirtualCamera(e,t){return!1}";
-    private const string JsFileName = "7205.75336589.js";
     private const string JsRelPath = @"resources\app\static\js\";
 
     private string? _targetFile;
     private string? _backupFile;
     private string? _version;
     private string? _appDir;
+    private string? _jsFileName;
     private bool _obsRunning;
     private bool _tiktokRunning;
 
@@ -106,20 +106,21 @@ public partial class MainForm : Form
         }
 
         _version = dirs[0].Name;
-        _targetFile = Path.Combine(dirs[0].FullName, JsRelPath, JsFileName);
-        _backupFile = _targetFile + ".backup";
+        Log($"版本: {_version}");
 
-        if (!File.Exists(_targetFile))
+        _targetFile = FindJsFile(dirs[0].FullName);
+        if (_targetFile == null)
         {
-            Log($"❌ 目标文件不存在: {JsFileName}");
+            Log("❌ 未找到 isVirtualCamera 函数");
             Log("  当前 TikTok 版本可能不受支持");
             _appDir = null;
-            _targetFile = null;
             return;
         }
 
-        Log($"版本: {_version}");
-        Log($"目标: {JsFileName}");
+        _jsFileName = Path.GetFileName(_targetFile);
+        _backupFile = _targetFile + ".backup";
+
+        Log($"目标: {_jsFileName}");
         if (File.Exists(_backupFile)) Log("备份: 已存在 ✓");
         else Log("备份: 待创建");
     }
@@ -166,6 +167,24 @@ public partial class MainForm : Form
         }
         catch { }
 
+        return null;
+    }
+
+    private static string? FindJsFile(string versionDir)
+    {
+        var jsDir = Path.Combine(versionDir, JsRelPath);
+        if (!Directory.Exists(jsDir)) return null;
+
+        foreach (var filePath in Directory.GetFiles(jsDir, "*.js"))
+        {
+            try
+            {
+                var content = File.ReadAllText(filePath);
+                if (content.Contains("isVirtualCamera"))
+                    return filePath;
+            }
+            catch { /* skip locked/binary files */ }
+        }
         return null;
     }
 
