@@ -19,6 +19,7 @@ public partial class MainForm : Form
     private bool _obsRunning;
     private bool _tiktokRunning;
     private string _originalFunc = "";
+    private bool _needAdmin;
 
     private static readonly string[] InstallPaths = {
         @"D:\TikTok LIVE Studio",
@@ -111,22 +112,23 @@ public partial class MainForm : Form
 
         _version = dirs[0].Name;
         Log($"版本: {_version}");
-
-        _targetFile = FindJsFile(dirs[0].FullName);
-        if (_targetFile == null)
-        {
-            Log("❌ 未找到 isVirtualCamera 函数");
-            Log("  当前 TikTok 版本可能不受支持");
-            _appDir = null;
-            return;
-        }
-
-        _jsFileName = Path.GetFileName(_targetFile);
-        _backupFile = _targetFile + ".backup";
-
         Log($"目标: {_jsFileName}");
         if (File.Exists(_backupFile)) Log("备份: 已存在 ✓");
         else Log("备份: 待创建");
+
+        // Check write permission
+        if (!IsPatched())
+        {
+            try
+            {
+                using var fs = File.Open(_targetFile, FileMode.Open, FileAccess.ReadWrite);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _needAdmin = true;
+            }
+        }
+        if (_needAdmin) Log("⚠ 需要管理员权限（位于 Program Files）");
     }
 
     private static string? FindTikTokInstall()
@@ -223,6 +225,30 @@ public partial class MainForm : Form
             return;
         }
 
+        if (_needAdmin && !IsPatched())
+        {
+            Log("");
+            Log(">>> 需要管理员权限 <<<");
+            Log("正在以管理员身份重新启动...");
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = Application.ExecutablePath,
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+                Process.Start(psi);
+                Application.Exit();
+                return;
+            }
+            catch
+            {
+                Log("❌ 提权失败，请右键以管理员身份运行此程序");
+                return;
+            }
+        }
+
         btnToggle.Enabled = false;
         btnToggle.Text = "处理中...";
 
@@ -280,7 +306,15 @@ public partial class MainForm : Form
         // Replace
         var newContent = content.Remove(start, end - start + 1)
                                 .Insert(start, NewFunc);
-        File.WriteAllText(_targetFile, newContent);
+        try
+        {
+            File.WriteAllText(_targetFile, newContent);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Log("❌ 权限不足，请以管理员身份运行");
+            return;
+        }
 
         if (IsPatched())
         {
