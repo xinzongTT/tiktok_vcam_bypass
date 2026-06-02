@@ -78,57 +78,78 @@ public partial class MainForm : Form
 
     private void DetectEnvironment()
     {
-        _obsRunning = Process.GetProcessesByName("obs64").Length > 0;
-        _tiktokRunning = Process.GetProcessesByName("TikTok LIVE Studio").Length > 0;
-
-        if (_obsRunning) Log("OBS Studio: 运行中 ✓");
-        else Log("OBS Studio: 未检测到");
-        if (_tiktokRunning) Log("TikTok LIVE Studio: 运行中（切换后需重启）");
-        else Log("TikTok LIVE Studio: 未启动");
-
-        _appDir = FindTikTokInstall();
-        if (_appDir == null)
+        try
         {
-            Log("❌ 未找到 TikTok LIVE Studio 安装目录");
-            Log("  已搜索以下路径:");
-            foreach (var p in InstallPaths) Log($"    {p}");
-            return;
+            _obsRunning = Process.GetProcessesByName("obs64").Length > 0;
+            _tiktokRunning = Process.GetProcessesByName("TikTok LIVE Studio").Length > 0;
+
+            if (_obsRunning) Log("OBS Studio: 运行中 ✓");
+            else Log("OBS Studio: 未检测到");
+            if (_tiktokRunning) Log("TikTok LIVE Studio: 运行中（切换后需重启）");
+            else Log("TikTok LIVE Studio: 未启动");
+
+            _appDir = FindTikTokInstall();
+            if (_appDir == null)
+            {
+                Log("❌ 未找到 TikTok LIVE Studio 安装目录");
+                Log("  已搜索以下路径:");
+                foreach (var p in InstallPaths) Log($"    {p}");
+                return;
+            }
+
+            Log($"安装目录: {_appDir}");
+
+            var dirs = Directory.GetDirectories(_appDir)
+                .Select(d => new DirectoryInfo(d))
+                .Where(d => Version.TryParse(d.Name, out _))
+                .OrderByDescending(d => new Version(d.Name))
+                .ToList();
+
+            if (dirs.Count == 0)
+            {
+                Log("❌ 未找到版本目录");
+                _appDir = null;
+                return;
+            }
+
+            _version = dirs[0].Name;
+            Log($"版本: {_version}");
+
+            _targetFile = FindJsFile(dirs[0].FullName);
+            if (_targetFile == null)
+            {
+                Log("❌ 未找到 isVirtualCamera 函数");
+                Log("  当前 TikTok 版本可能不受支持");
+                _appDir = null;
+                return;
+            }
+
+            _jsFileName = Path.GetFileName(_targetFile);
+            _backupFile = _targetFile + ".backup";
+
+            Log($"目标: {_jsFileName}");
+            if (File.Exists(_backupFile)) Log("备份: 已存在 ✓");
+            else Log("备份: 待创建");
+
+            // Check write permission
+            if (_targetFile != null && !IsPatched())
+            {
+                try
+                {
+                    using var fs = File.Open(_targetFile, FileMode.Open, FileAccess.ReadWrite);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    _needAdmin = true;
+                }
+            }
+            if (_needAdmin) Log("⚠ 需要管理员权限（位于 Program Files）");
         }
-
-        Log($"安装目录: {_appDir}");
-
-        var dirs = Directory.GetDirectories(_appDir)
-            .Select(d => new DirectoryInfo(d))
-            .Where(d => Version.TryParse(d.Name, out _))
-            .OrderByDescending(d => new Version(d.Name))
-            .ToList();
-
-        if (dirs.Count == 0)
+        catch (Exception ex)
         {
-            Log("❌ 未找到版本目录");
+            Log($"❌ 检测环境时出错: {ex.Message}");
             _appDir = null;
-            return;
         }
-
-        _version = dirs[0].Name;
-        Log($"版本: {_version}");
-        Log($"目标: {_jsFileName}");
-        if (File.Exists(_backupFile)) Log("备份: 已存在 ✓");
-        else Log("备份: 待创建");
-
-        // Check write permission
-        if (!IsPatched())
-        {
-            try
-            {
-                using var fs = File.Open(_targetFile, FileMode.Open, FileAccess.ReadWrite);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                _needAdmin = true;
-            }
-        }
-        if (_needAdmin) Log("⚠ 需要管理员权限（位于 Program Files）");
     }
 
     private static string? FindTikTokInstall()
