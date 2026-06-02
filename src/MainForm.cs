@@ -312,6 +312,9 @@ public partial class MainForm : Form
         // Extract original function
         _originalFunc = content.Substring(start, end - start + 1);
         Log($"匹配到函数: {_originalFunc.Length} 字符");
+        // Show first 120 chars of original for debug
+        var preview = _originalFunc.Length > 120 ? _originalFunc[..120] + "..." : _originalFunc;
+        Log($"原始: {preview}");
 
         // Create backup
         if (!File.Exists(_backupFile))
@@ -327,6 +330,17 @@ public partial class MainForm : Form
         // Replace
         var newContent = content.Remove(start, end - start + 1)
                                 .Insert(start, NewFunc);
+
+        // Verify braces balance
+        int openCount = newContent.Count(c => c == '{');
+        int closeCount = newContent.Count(c => c == '}');
+        if (openCount != closeCount)
+        {
+            Log($"❌ 括号不平衡！open={openCount} close={closeCount}");
+            Log("   补丁已放弃，文件未修改");
+            return;
+        }
+
         try
         {
             File.WriteAllText(_targetFile, newContent);
