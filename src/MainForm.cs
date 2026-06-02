@@ -42,7 +42,7 @@ public partial class MainForm : Form
     {
         txtLog.Clear();
         Log("═══════════════════════════");
-        Log("  TikTok 虚拟摄像头绕过 v1.0.2");
+        Log("  TikTok 虚拟摄像头绕过 v1.0.5");
         Log("═══════════════════════════");
 
         DetectEnvironment();

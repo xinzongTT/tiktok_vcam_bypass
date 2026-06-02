@@ -108,7 +108,7 @@ partial class MainForm
         this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
         this.MaximizeBox = false;
         this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-        this.Text = "TikTok 虚拟摄像头绕过 v1.0.2";
+        this.Text = "TikTok 虚拟摄像头绕过 v1.0.5";
         this.Load += new System.EventHandler(this.MainForm_Load);
         this.ResumeLayout(false);
         this.PerformLayout();
