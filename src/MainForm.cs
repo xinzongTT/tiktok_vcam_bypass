@@ -6,10 +6,10 @@ namespace TikTokVCamBypass;
 
 public partial class MainForm : Form
 {
-    private const string NewFunc = "isVirtualCamera(e,t){return!1}";
+    private const string NewFunc = "";
     private const string JsRelPath = @"resources\app\static\js\";
     private const string FuncMarker = "isVirtualCamera(e,t){";
-    private const string PatchedMarker = "isVirtualCamera(e,t){return!1}";
+    private const string PatchedMarker = "isVirtualCamera(e,t){return!1;";
 
     private string? _targetFile;
     private string? _backupFile;
@@ -18,7 +18,6 @@ public partial class MainForm : Form
     private string? _jsFileName;
     private bool _obsRunning;
     private bool _tiktokRunning;
-    private string _originalFunc = "";
     private bool _needAdmin;
 
     private static readonly string[] InstallPaths = {
@@ -293,7 +292,7 @@ public partial class MainForm : Form
         Log(">>> 正在应用补丁...");
         var content = File.ReadAllText(_targetFile);
 
-        // Find isVirtualCamera(e,t){ and extract the full function
+        // Find isVirtualCamera(e,t){ and insert return!1; at the start
         int start = content.IndexOf(FuncMarker, StringComparison.Ordinal);
         if (start == -1)
         {
@@ -301,20 +300,8 @@ public partial class MainForm : Form
             return;
         }
 
-        // Use bracket counting to find the matching closing brace
-        int end = FindMatchingBrace(content, start + FuncMarker.Length - 1);
-        if (end == -1)
-        {
-            Log("❌ 无法解析函数结构（括号不匹配）");
-            return;
-        }
-
-        // Extract original function
-        _originalFunc = content.Substring(start, end - start + 1);
-        Log($"匹配到函数: {_originalFunc.Length} 字符");
-        // Show first 120 chars of original for debug
-        var preview = _originalFunc.Length > 120 ? _originalFunc[..120] + "..." : _originalFunc;
-        Log($"原始: {preview}");
+        // Insert point is right after the opening brace
+        int insertPos = start + FuncMarker.Length; // position right after {
 
         // Create backup
         if (!File.Exists(_backupFile))
@@ -323,23 +310,12 @@ public partial class MainForm : Form
             Log("已创建备份 ✓");
         }
 
-        // Save original function for restore
-        var backupMeta = _backupFile + ".meta";
-        File.WriteAllText(backupMeta, _originalFunc);
+        // Save original function for restore (extract a reasonable preview)
+        var preview = content.Substring(start, Math.Min(200, content.Length - start));
+        Log($"匹配到函数: {preview}...");
 
-        // Replace
-        var newContent = content.Remove(start, end - start + 1)
-                                .Insert(start, NewFunc);
-
-        // Verify braces balance
-        int openCount = newContent.Count(c => c == '{');
-        int closeCount = newContent.Count(c => c == '}');
-        if (openCount != closeCount)
-        {
-            Log($"❌ 括号不平衡！open={openCount} close={closeCount}");
-            Log("   补丁已放弃，文件未修改");
-            return;
-        }
+        // Insert return!1; right inside the function body
+        var newContent = content.Insert(insertPos, "return!1;");
 
         try
         {
@@ -355,7 +331,7 @@ public partial class MainForm : Form
         {
             Log("补丁应用成功 ✓");
             Log("");
-            Log("isVirtualCamera 已被修改为始终返回 false");
+            Log("isVirtualCamera → 首行插入 return false");
             Log("所有虚拟摄像头将被视为真实设备");
             KillServices();
         }
@@ -381,28 +357,16 @@ public partial class MainForm : Form
         }
         else
         {
-            var backupMeta = _backupFile + ".meta";
-            if (File.Exists(backupMeta))
+            var content = File.ReadAllText(_targetFile);
+            if (content.Contains(PatchedMarker))
             {
-                var originalFunc = File.ReadAllText(backupMeta);
-                var content = File.ReadAllText(_targetFile);
-
-                int start = content.IndexOf(PatchedMarker, StringComparison.Ordinal);
-                if (start >= 0)
-                {
-                    content = content.Remove(start, PatchedMarker.Length)
-                                     .Insert(start, originalFunc);
-                    File.WriteAllText(_targetFile, content);
-                    Log("已从元数据恢复 ✓");
-                }
-                else
-                {
-                    Log("文件已处于原始状态或无法识别");
-                }
+                content = content.Replace(PatchedMarker, FuncMarker);
+                File.WriteAllText(_targetFile, content);
+                Log("已内联修复 ✓");
             }
             else
             {
-                Log("备份文件不存在，无法恢复");
+                Log("文件已处于原始状态");
             }
         }
         Log("虚拟摄像头检测已恢复正常");
